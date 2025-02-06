@@ -68,7 +68,17 @@ const getSubscribersBySegment = async (req: Request, res: Response): Promise<any
         const segmentId = req.params.segmentId;
         const userId = req.userId;
 
-        const subscribers: ISubscriber[] = await Subscriber.find({ segmentId, createdBy: userId });
+        const subscribers: ISubscriber[] = await Subscriber.find({ segmentId, createdBy: userId }).populate({
+            path: 'segmentId',
+            model: Segment,
+            select: '_id name description createdBy',
+            populate: {
+                path: 'createdBy',
+                model: 'User',
+                select: '_id name email',
+            },
+        });
+
 
         if (subscribers.length <= 0) {
             return res.status(404).json({ message: "there are no subscribers" });
@@ -85,7 +95,16 @@ const getSubscribers = async (req: Request, res: Response): Promise<any> => {
     try {
         const userId = req.userId;
 
-        const subscribers: ISubscriber[] = await Subscriber.find({ createdBy: userId });
+        const subscribers: ISubscriber[] = await Subscriber.find({ createdBy: userId }).populate({
+            path: 'segmentId',
+            model: Segment,
+            select: '_id name description createdBy',
+            populate: {
+                path: 'createdBy',
+                model: 'User',
+                select: '_id name email',
+            },
+        });
 
         if (subscribers.length <= 0) {
             return res.status(404).json({ message: "there are no subscribers" });
