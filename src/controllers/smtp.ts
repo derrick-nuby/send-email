@@ -67,14 +67,43 @@ const getSingleSmtp = async (req: Request, res: Response): Promise<Response> => 
 const updateSmtp = async (req: Request, res: Response): Promise<Response> => {
     try {
         const userId = req.userId;
+        const { auth, ...updateData } = req.body;
 
-        const updatedSmtp = await Smtp.findOneAndUpdate({ _id: req.params.id, createdBy: userId }, req.body, { new: true });
+        const updatedSmtp = await Smtp.findOneAndUpdate(
+            { _id: req.params.id, createdBy: userId },
+            updateData,
+            { new: true }
+        );
 
         if (!updatedSmtp) {
             return res.status(404).json({ error: "SMTP configuration not found" });
         }
 
         return res.status(200).json({ message: "SMTP configuration updated successfully", smtp: updatedSmtp });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Server error" });
+    }
+};
+
+const updateAuthSmtp = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        const userId = req.userId;
+        const { user, pass } = req.body.auth;
+
+        const smtp = await Smtp.findOne({ _id: req.params.id, createdBy: userId });
+
+        if (!smtp) {
+            return res.status(404).json({ error: "SMTP configuration not found" });
+        }
+
+        smtp.auth.user = user;
+        smtp.auth.pass = pass;
+        smtp.isTested = false;
+
+        await smtp.save();
+
+        return res.status(200).json({ message: "SMTP auth updated successfully", smtp });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Server error" });
@@ -114,32 +143,44 @@ const sendSmtpVerification = async (req: Request, res: Response): Promise<void> 
         const { smtpId, email } = req.body;
         const userId = req.userId;
 
-
         if (!smtpId || !email) {
             res.status(400).json({ error: "SMTP ID and email are required." });
             return;
         }
 
         const smtp = await getSmtp(smtpId);
+        console.log({ smtp, userId });
 
-        if (!smtp || smtp.createdBy !== userId) {
+        if (!smtp || smtp.createdBy.toString() !== userId) {
             res.status(404).json({ error: "SMTP configuration not found." });
             return;
         }
 
         const token = tokenGenerator({ smtpId: smtp._id, userId });
 
-        const transporterOptions: any = {
-            service: smtp.service,
-            pool: smtp.pool,
-            host: smtp.host,
-            port: smtp.port,
-            secure: smtp.secure,
-            auth: {
-                user: smtp.auth.user,
-                pass: smtp.auth.pass,
-            },
-        };
+        let transporterOptions: any;
+
+        if (smtp.service === 'gmail') {
+            transporterOptions = {
+                service: 'gmail',
+                auth: {
+                    user: smtp.auth.user,
+                    pass: smtp.auth.pass,
+                },
+            };
+        } else {
+            transporterOptions = {
+                service: smtp.service,
+                pool: smtp.pool,
+                host: smtp.host,
+                port: smtp.port,
+                secure: smtp.secure,
+                auth: {
+                    user: smtp.auth.user,
+                    pass: smtp.auth.pass,
+                },
+            };
+        }
 
         const transporter = nodemailer.createTransport(transporterOptions);
 
@@ -275,7 +316,6 @@ const sendSmtpVerification = async (req: Request, res: Response): Promise<void> 
 const verifySmtp = async (req: Request, res: Response): Promise<void> => {
     try {
         const { token } = req.params;
-        const userId = req.userId;
 
         if (!token) {
             res.status(400).json({ error: "Token is required." });
@@ -292,11 +332,6 @@ const verifySmtp = async (req: Request, res: Response): Promise<void> => {
         const smtpId = decoded.smtpId;
 
         const smtp = await getSmtp(smtpId);
-
-        if (!smtp || smtp.createdBy !== userId) {
-            res.status(404).json({ error: "SMTP configuration not found." });
-            return;
-        }
 
         const updatedSmtp = await Smtp.findByIdAndUpdate(smtpId, {
             isTested: true,
@@ -319,4 +354,4 @@ const verifySmtp = async (req: Request, res: Response): Promise<void> => {
     }
 };
 
-export { createSmtp, getAllSmtps, getSingleSmtp, updateSmtp, deleteSmtp, getUserSmtps, sendSmtpVerification, verifySmtp };
+export { createSmtp, getAllSmtps, getSingleSmtp, updateSmtp, deleteSmtp, getUserSmtps, sendSmtpVerification, verifySmtp, updateAuthSmtp };

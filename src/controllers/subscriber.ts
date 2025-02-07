@@ -68,7 +68,17 @@ const getSubscribersBySegment = async (req: Request, res: Response): Promise<any
         const segmentId = req.params.segmentId;
         const userId = req.userId;
 
-        const subscribers: ISubscriber[] = await Subscriber.find({ segmentId, createdBy: userId });
+        const subscribers: ISubscriber[] = await Subscriber.find({ segmentId, createdBy: userId }).populate({
+            path: 'segmentId',
+            model: Segment,
+            select: '_id name description createdBy',
+            populate: {
+                path: 'createdBy',
+                model: 'User',
+                select: '_id name email',
+            },
+        });
+
 
         if (subscribers.length <= 0) {
             return res.status(404).json({ message: "there are no subscribers" });
@@ -85,7 +95,16 @@ const getSubscribers = async (req: Request, res: Response): Promise<any> => {
     try {
         const userId = req.userId;
 
-        const subscribers: ISubscriber[] = await Subscriber.find({ createdBy: userId });
+        const subscribers: ISubscriber[] = await Subscriber.find({ createdBy: userId }).populate({
+            path: 'segmentId',
+            model: Segment,
+            select: '_id name description createdBy',
+            populate: {
+                path: 'createdBy',
+                model: 'User',
+                select: '_id name email',
+            },
+        });
 
         if (subscribers.length <= 0) {
             return res.status(404).json({ message: "there are no subscribers" });
@@ -502,5 +521,34 @@ const previewUpload = async (req: Request, res: Response): Promise<void> => {
     }
 };
 
+const addBulkJsonSubscribers = async (req: Request, res: Response): Promise<any> => {
+    try {
+        const userId = new Types.ObjectId(req.userId);
+        const subscribersData = req.body;
 
-export { getSubscribers, getSingleSubscriber, createSubscriber, updateSubscriber, deleteSubscriber, getSubscribersBySegment, getAllAppSubscribers, uploadSubscribersByCSV, searchSubscriber, changeSubscriberSegment, previewUpload, bulkDeleteSubscribers };
+        const subscribers = subscribersData.map((data: any) => {
+            const { name, email, notes, segmentId, isSubscribed, customFields, ...rest } = data;
+            return {
+                name,
+                email,
+                notes,
+                segmentId,
+                createdBy: userId,
+                isSubscribed: isSubscribed !== undefined ? isSubscribed : true,
+                customFields: { ...customFields, ...rest },
+            };
+        });
+
+        const result = await Subscriber.insertMany(subscribers, { ordered: false });
+
+        res.status(201).json({
+            message: `${result.length} subscribers added successfully`,
+            subscribers: result,
+        });
+    } catch (error) {
+        console.error('Error adding bulk JSON subscribers:', error);
+        res.status(500).json({ error: 'Failed to add subscribers' });
+    }
+};
+
+export { getSubscribers, getSingleSubscriber, createSubscriber, updateSubscriber, deleteSubscriber, getSubscribersBySegment, getAllAppSubscribers, uploadSubscribersByCSV, searchSubscriber, changeSubscriberSegment, previewUpload, bulkDeleteSubscribers, addBulkJsonSubscribers };

@@ -63,7 +63,6 @@ const smtpSchema = Joi.object({
 
 const smtpUpdateSchema = Joi.object({
     name: Joi.string()
-        .required()
         .messages({
             'string.base': 'please name your smtp server correctly',
         }),
